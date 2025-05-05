@@ -1,0 +1,164 @@
+---
+title: "Creative Visualisation"
+author: "Asianzu"
+format: html
+editor: visual
+---
+
+#Chimp-Galaxy Concept
+```{r}
+
+#This project analysing and transoforms and visualises chimps (centrality scores) into galaxies in a plot and eventually a gif. Individual characteristics such as age, dominance, flow betweenness, and centrality measures were used. I used the dataset of the respiratory outbreak the Ngogo chimpanzees (2020) in this project, manipulating the centrality scores to actualise the dancing chimps-turned-galaxies concept. 
+
+```
+
+#Load Files
+```{r}
+
+setwd("~/Practice R/practice/Creative Visualisation/Data")
+
+library(tidyverse)
+
+#Data for the visualisation
+f <- "individual chimpanzee data.csv"
+p <- read.csv(f, header = TRUE)
+colnames(p)
+
+
+```
+
+
+
+#Execute the code
+```{r}
+
+library(ggplot2)
+library(dplyr)
+library(scales)
+
+set.seed(123)  # Set a random seed for reproducibility
+
+# Rescaling values for better visualization
+p <- p %>%
+  mutate(
+    # Create random x and y coordinates
+    x = runif(n(), min = -1, max = 1), 
+    y = runif(n(), min = -1, max = 1), 
+    age_scaled = rescale(age, to = c(0, 1)),
+    dominance_scaled = rescale(dominance.score, to = c(0.4, 1)), 
+    flow_scaled = rescale(flow.betweenness, to = c(0.5, 1.5)),
+    eigen_scaled = rescale(eigenvector.centrality, to = c(2, 8)),
+    strength_scaled = rescale(strength.centrality, to = c(0.5, 1.5)),
+    x_glow = x + strength_scaled * sin(flow_scaled * pi),  # Adjust 'x' position with a glowing effect based on strength and flow
+    y_glow = y + strength_scaled * cos(flow_scaled * pi)   # Adjust 'y' position with a glowing effect based on strength and flow
+  )
+
+# Create the galaxy-style plot using ggplot
+ggplot(p, aes(x = x_glow, y = y_glow)) +  # Set up the plot with x and y positions 
+  
+  theme_void() +  
+  
+  theme(panel.background = element_rect(fill = "black")) +  
+  
+  geom_point(
+    aes(size = eigen_scaled, color = age_scaled, alpha = dominance_scaled),#size' to eigenvector centrality, 'color' to age, 'alpha' to dominance
+    shape = 8,#Using star-shaped points (shape 8 corresponds to a star)
+    show.legend = FALSE
+  ) +
+  
+  scale_color_gradientn(colors = c("cyan", "orchid", "yellow")) +  #color gradient based on age
+  scale_size(range = c(2, 10)) +  
+  scale_alpha(range = c(0.4, 1)) +  # Setting the transparency range based on dominance
+  coord_fixed()  # Ensuring aspect ratio of the is fixed to prevent distortion of the point positions
+
+```
+
+#Add Animation Effects 
+```{r}
+
+# relevant libraries
+
+library(gganimate)
+library(RColorBrewer)
+library(Cairo)  # Explicitly load Cairo
+
+# Rescaling values for better visualization
+p <- p |>
+  mutate(
+    age_scaled = rescale(age, to = c(0, 1)),
+    dominance_scaled = rescale(dominance.score, to = c(0.4, 1)), 
+    flow_scaled = rescale(flow.betweenness, to = c(0.5, 1.5)),
+    eigen_scaled = rescale(eigenvector.centrality, to = c(2, 8)),
+    strength_scaled = rescale(strength.centrality, to = c(0.5, 1.5)),
+    x = runif(n(), min = -1, max = 1),  # Generate random x values 
+    y = runif(n(), min = -1, max = 1)   # Generate random y values 
+  )
+
+# Assigning constellation colors
+neighborhood_colors <- brewer.pal(length(unique(p$neighborhood)), "Set2")
+names(neighborhood_colors) <- unique(p$neighborhood)
+
+n_frames <- 60
+
+# Generate animation frames with constellation-based drift
+p_anim <- do.call(rbind, lapply(1:n_frames, function(frame) {
+  t <- 2 * pi * frame / n_frames
+  p |>
+    mutate(
+      frame = frame,  
+      drift_x = 0.04 * sin(flow_scaled * t + as.numeric(as.factor(neighborhood))), # X drift based on flow
+      drift_y = 0.04 * cos(flow_scaled * t + as.numeric(as.factor(neighborhood))), # Y drift based on flow
+      x_anim = x + drift_x,  # Apply X drift to base x position
+      y_anim = y + drift_y,  # Apply Y drift to base y position
+      pulse = eigen_scaled * (1 + 0.2 * sin(t + strength_scaled)), # Pulsing effect based on eigenvector and strength scores
+      neighborhood_col = neighborhood_colors[neighborhood]  
+    )
+}))
+
+# Animated plot
+constellation_plot <- ggplot(p_anim, aes(x = x_anim, y = y_anim)) +
+  theme_void() +  # Remove all default plot elements
+  theme(panel.background = element_rect(fill = "black")) +  # Black background
+
+  # Faint outer aura for each "star"
+  geom_point(aes(size = pulse * 1.3, color = neighborhood, alpha = 0.15),
+             shape = 8, show.legend = FALSE) +
+
+  # Glowing mid layer
+  geom_point(aes(size = pulse, color = neighborhood, alpha = 0.4),
+             shape = 8, show.legend = FALSE) +
+
+  # Sharp inner core based on dominance
+  geom_point(aes(size = pulse * 0.6, color = neighborhood, alpha = dominance_scaled),
+             shape = 8, show.legend = FALSE) +
+
+  # Map neighborhood colors and adjust sizes
+  scale_color_manual(values = neighborhood_colors) +
+  scale_size(range = c(2, 10)) +
+  scale_alpha(range = c(0.1, 1)) +
+  coord_fixed() +  # Keep aspect ratio fixed
+  transition_time(frame) +  # Animate over the frame variable
+  ease_aes('linear')  # Use linear easing for smooth movement
+
+# Animate using default gifski
+animate(
+  constellation_plot,
+  nframes = n_frames,
+  fps = 12,
+  width = 800,
+  height = 800,
+  renderer = gifski_renderer("galaxy.gif")
+)
+
+
+
+```
+
+
+#Galaxy concept gif
+```{r}
+
+knitr::include_graphics(normalizePath("~/Practice R/practice/Creative Visualisation/Data/galaxy.gif"))
+
+
+```
